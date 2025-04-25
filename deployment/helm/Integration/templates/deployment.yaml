@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ template "app.name" . }}"
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "app.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "app.labels" . | nindent 8 }}
+      annotations:
+{{- if .Values.podAnnotations }}
+{{ toYaml .Values.podAnnotations | indent 8 }}
+{{- end }}
+    spec:
+      {{- if .Values.serviceAccountName }}
+      serviceAccountName: {{ .Values.serviceAccountName }}
+      {{- end }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecrets }}
+      containers:
+      - name: {{ .Chart.Name }}
+        image: "{{ .Values.image.repository }}/{{ .Values.image.name }}:{{ default .Chart.AppVersion .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+        env:
+          - name: "INVITE_IDENTITY_PROVIDER_OID_URL"
+            value: {{ .Values.config.inviteIdentityProviderOidURL }}
+          - name: "CREATE_IDENTITY_PROVIDER_OID_URL"
+            value: {{ .Values.config.createIdentityProviderOidURL }}
+          - name: "MAIL_SUPPORT_ADDRESS"
+            value: {{ .Values.config.mail.mailSupportAddress }}
+          - name: "MAIL_SMTP_HOST"
+            value: {{ .Values.config.mail.mailSmtpHost }}
+          - name: "MAIL_SMTP_PORT"
+            value: {{ .Values.config.mail.mailSmtpPort }}
+          - name: "MAIL_TEMPLATE"
+            value: {{ .Values.config.mail.mailTemplate }}
+          - name: "MAIL_TEMPLATE_KEYS"
+            value: {{ .Values.config.mail.mailTemplateKeys }}
+          - name: MAIL_SMTP_USERNAME
+            value: {{ .Values.config.mail.mailSmtpUsername }}
+          - name: MAIL_SMTP_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "app.fullname" . }}-mail-smtp-secret
+                key: "mailSmtpPassword"
+          - name: "CREATE_ADMIN_ROLE_PATH"
+            value: {{ .Values.config.createAdminRolePath }}
+          - name: "INVITE_ADMIN_ROLE_PATH"
+            value: {{ .Values.config.inviteAdminRolePath }}
+          - name: "ADMIN_ROLES"
+            value: {{ .Values.config.adminRoles }}
+          - name: "CREDENTIAL_MAPPING"
+            value: {{ .Values.config.credentialMapping | toJson | quote }}
+          - name: "CREDENTIAL_DATA_TEMPLATE"
+            value: {{ .Values.config.credentialDataTemplate | toJson | quote }}
+          - name: "CREDENTIAL_ENDPOINT"
+            value: {{ .Values.config.credentialEndpoint }}
+          - name: "CLAIM_MAPPING_SERVICE_URL"
+            value: {{ .Values.config.claimMappingServiceURL }}
+          - name: PORT
+            value: "{{ .Values.server.http.port }}"
+        ports:
+        - name: http
+          containerPort: {{ .Values.server.http.port }}
+        readinessProbe:
+          httpGet:
+            path: /isAlive
+            port: {{ .Values.server.http.port }}
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          successThreshold: 2
+          failureThreshold: 2
+          timeoutSeconds: 5
